@@ -54,6 +54,8 @@ public class SimpleWebServer implements Runnable {
 
     public void stop() {
         running = false;
+
+        serverThread.interrupt();
     }
 
     public void run() {

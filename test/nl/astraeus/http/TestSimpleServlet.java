@@ -109,13 +109,13 @@ public class TestSimpleServlet {
 
     @Test
     public void testSimpleServlet() throws IOException {
-        SimpleWebServer server = new SimpleWebServer(9876);
+        SimpleWebServer server = new SimpleWebServer(9999);
 
         server.addServlet(new HelloWorldServlet(), "/test");
 
         server.start();
 
-        String result = readURL("http://127.0.0.1:9876/test");
+        String result = readURL("http://127.0.0.1:9999/test");
 
         server.stop();
 

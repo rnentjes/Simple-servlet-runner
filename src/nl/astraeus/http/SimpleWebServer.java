@@ -139,15 +139,13 @@ public class SimpleWebServer implements Runnable {
     }
 
     synchronized String createSessionId() {
-        int hash = ((Long)System.nanoTime()).hashCode();
+        String hash = Integer.toString(((Long)System.nanoTime()).hashCode());
 
-        if (sessions.containsKey(hash)) {
-            hash = ((Long)System.nanoTime()).hashCode();
+        while (sessions.containsKey(hash)) {
+            hash = Integer.toString(((Long)System.nanoTime()).hashCode());
         }
 
-        String result = String.valueOf(hash);
-
-        return result;
+        return hash;
     }
 
     SimpleServletContext getServletContext() {

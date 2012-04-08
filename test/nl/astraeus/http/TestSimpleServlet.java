@@ -115,7 +115,7 @@ public class TestSimpleServlet {
 
         server.start();
 
-        String result = readURL("http://localhost:9876/test");
+        String result = readURL("http://127.0.0.1:9876/test");
 
         server.stop();
 

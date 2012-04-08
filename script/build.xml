@@ -58,6 +58,9 @@
 
     <path id="cobertura.class.path">
         <pathelement location="${test.classes.dir}"/>
+        <fileset dir="${lib.dir}">
+            <include name="*.jar"/>
+        </fileset>
         <fileset dir="${build.lib.dir}/junit">
             <include name="**/*.jar"/>
         </fileset>

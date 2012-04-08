@@ -16,7 +16,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class SimpleWebServer implements Runnable {
     private SimpleServletContext    context;
-    private int                     sessionId = 1;
     private Thread                  serverThread;
     private volatile boolean        running = true;
     private int                     port = 8080;
@@ -122,7 +121,7 @@ public class SimpleWebServer implements Runnable {
     }
 
     SimpleHttpSession getSession(String id) {
-        SimpleHttpSession result = null;
+        SimpleHttpSession result;
 
         if (id == null || id.length() == 0) {
             id = createSessionId();
@@ -140,12 +139,25 @@ public class SimpleWebServer implements Runnable {
     }
 
     synchronized String createSessionId() {
-        String result = String.valueOf(sessionId++);
+        int hash = ((Long)System.nanoTime()).hashCode();
+
+        if (sessions.containsKey(hash)) {
+            hash = ((Long)System.nanoTime()).hashCode();
+        }
+
+        String result = String.valueOf(hash);
 
         return result;
     }
 
     SimpleServletContext getServletContext() {
         return context;
+    }
+
+    void addRequestLog(HttpServlet servlet, SimpleHttpRequest request, long l) {
+    }
+
+    int getPort() {
+        return port;
     }
 }

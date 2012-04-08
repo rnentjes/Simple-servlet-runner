@@ -194,15 +194,14 @@ public class SimpleHttpResponse implements HttpServletResponse {
     }
 
     public void setBufferSize(int i) {
-        //To change body of implemented methods use File | Settings | File Templates.
+        throw new IllegalStateException("Setting buffer size is not supported");
     }
 
     public int getBufferSize() {
-        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+        return 1<<14;
     }
 
-    public void flushBuffer() throws IOException {
-    }
+    public void flushBuffer() throws IOException {}
 
     public void resetBuffer() {
         printWriter = null;
@@ -210,11 +209,11 @@ public class SimpleHttpResponse implements HttpServletResponse {
     }
 
     public boolean isCommitted() {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public void reset() {
-        //To change body of implemented methods use File | Settings | File Templates.
+        resetBuffer();
     }
 
     public void setLocale(Locale locale) {

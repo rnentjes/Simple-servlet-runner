@@ -124,7 +124,7 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public String getAuthType() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public Cookie[] getCookies() {
@@ -156,15 +156,15 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public String getPathInfo() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public String getPathTranslated() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public String getContextPath() {
-        return "";
+        return "/";
     }
 
     public String getQueryString() {
@@ -172,19 +172,19 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public String getRemoteUser() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public boolean isUserInRole(String s) {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public Principal getUserPrincipal() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public String getRequestedSessionId() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public String getRequestURI() {
@@ -192,11 +192,11 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public StringBuffer getRequestURL() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public String getServletPath() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return uri;
     }
 
     public HttpSession getSession(boolean b) {
@@ -220,19 +220,19 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public boolean isRequestedSessionIdValid() {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public boolean isRequestedSessionIdFromCookie() {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public boolean isRequestedSessionIdFromURL() {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public boolean isRequestedSessionIdFromUrl() {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public String getCharacterEncoding() {
@@ -240,6 +240,7 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public void setCharacterEncoding(String s) throws UnsupportedEncodingException {
+        throw new IllegalStateException("Setting of character encoding not supported, it's hardcoded to UTF-8");
     }
 
     public int getContentLength() {
@@ -247,32 +248,31 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public String getContentType() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return contentType;
     }
 
     public ServletInputStream getInputStream() throws IOException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
-
     public String getProtocol() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return "http";
     }
 
     public String getScheme() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public String getServerName() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return "Simple-web-server";
     }
 
     public int getServerPort() {
-        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+        return server.getPort();
     }
 
     public BufferedReader getReader() throws IOException {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        throw new IllegalStateException("Not supported");
     }
 
     public String getRemoteAddr() {
@@ -292,31 +292,31 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public boolean isSecure() {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
+        return false;
     }
 
     public RequestDispatcher getRequestDispatcher(String s) {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return new SimpleRequestDispatcher(server.findHandlingServlet(uri));
     }
 
     public String getRealPath(String s) {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return null;
     }
 
     public int getRemotePort() {
-        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+        return 0;
     }
 
     public String getLocalName() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return "";
     }
 
     public String getLocalAddr() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
+        return "";  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     public int getLocalPort() {
-        return 0;  //To change body of implemented methods use File | Settings | File Templates.
+        return 0;
     }
 
     public boolean getHttp11() {

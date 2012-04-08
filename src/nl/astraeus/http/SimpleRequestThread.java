@@ -2,6 +2,7 @@ package nl.astraeus.http;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpSession;
 import java.io.*;
 import java.net.SocketException;
 import java.net.UnknownHostException;
@@ -476,14 +477,7 @@ public class SimpleRequestThread implements Runnable {
             outBuffer.clear();
 
             while (running && keepalive) {
-                //List<String> lines = readBlock(inBuffer, sc);
-                //String [] test = readBlock2(inBuffer, sc);
-
                 Map<HttpHeader, String> headers = readHeaders(inBuffer, sc);
-
-//                for (String l : test) {
-//                    lines.add(l);
-//                }
 
                 keepalive = false;
 
@@ -517,14 +511,14 @@ public class SimpleRequestThread implements Runnable {
                             throw new IllegalStateException("Don't know how to handle: [" + in + "]");
                         }
                     }
-
-                    keepalive = request.getKeepAlive();
                 }
 
                 if (request == null) {
                     response = new SimpleHttpResponse(server);
                     response.sendError(404, "Unknown request type (only GET supported!)");
                 } else {
+                    keepalive = request.getKeepAlive();
+
                     HttpServlet servlet = server.findHandlingServlet(request.getRequestURI());
 
                     if (servlet == null) {
@@ -533,20 +527,28 @@ public class SimpleRequestThread implements Runnable {
                     } else {
                         response = new SimpleHttpResponse(server);
 
+                        SimpleHttpSession session = (SimpleHttpSession)request.getSession();
+
+                        if (session.getLastAccessedTime() < (System.currentTimeMillis() - (session.getMaxInactiveInterval() * 1000L))) {
+                            // new session
+                        } else {
+                            session.setLastAccessedTime();
+                        }
+
                         servlet.service(request, response);
 
                         try {
                             ByteArrayOutputStream out = new ByteArrayOutputStream();
 
                             response.writeToOutputStream(request, new DataOutputStream(out));
-                            //byte [] bytes = ((SimpleServletOutputStream)response.getOutputStream()).getBytes();
 
                             writeBytesToChannel(out.toByteArray(), outBuffer, sc);
                             writeBytesToChannel(((SimpleServletOutputStream)response.getOutputStream()).getBytes(), outBuffer, sc);
-
                         } catch (SocketException e) {
                             // connection reset by client, ignoring
                         }
+
+                        server.addRequestLog(servlet, request, (System.nanoTime() - requestStart));
                     }
                 }
             }

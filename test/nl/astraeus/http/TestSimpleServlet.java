@@ -52,10 +52,41 @@ public class TestSimpleServlet {
         return result;
     }
 
+    private void postToURL(String u) throws IOException {
+        URL url = new URL(u);
+
+        URLConnection connection = url.openConnection();
+        connection.setDoOutput(true);
+        OutputStreamWriter out = null;
+
+        try {
+            out = new OutputStreamWriter(connection.getOutputStream());
+
+            out.write(u);
+        } finally {
+            if (out != null) {
+                out.close();
+            }
+        }
+    }
+
     public static class HelloWorldServlet extends HttpServlet {
         @Override
         protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-            resp.getWriter().println("Hello world!");
+            if ("true".equals(req.getSession().getAttribute("switch"))) {
+                resp.getWriter().println("Goodbye world!");
+            } else {
+                resp.getWriter().println("Hello world!");
+            }
+        }
+
+        @Override
+        protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+            Boolean s = (Boolean)req.getSession().getAttribute("switch");
+
+            s = "q".equals(req.getParameter("switch"));
+
+            req.getSession().setAttribute("switch", s);
         }
     }
 
@@ -72,6 +103,26 @@ public class TestSimpleServlet {
         server.stop();
 
         Assert.assertEquals("Hello world!\n", result);
+    }
+
+    @Test
+    public void testSimpleServletPost() throws IOException {
+        SimpleWebServer server = new SimpleWebServer(9999);
+
+        server.addServlet(new HelloWorldServlet(), "/test");
+
+        server.start();
+
+        String result = readURL("http://localhost:9999/test");
+
+        postToURL("switch=true");
+
+        String result2 = readURL("http://localhost:9999/test");
+
+        server.stop();
+
+        Assert.assertEquals("Hello world!\n", result);
+        Assert.assertEquals("Goodbye world!\n", result2);
     }
 
 }

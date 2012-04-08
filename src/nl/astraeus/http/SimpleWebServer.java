@@ -14,23 +14,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * Date: 4/3/12
  * Time: 7:36 PM
  */
-public class SimpleWebServer extends Thread {
+public class SimpleWebServer implements Runnable {
+    private SimpleServletContext    context;
+    private int                     sessionId = 1;
+    private Thread                  serverThread;
+    private volatile boolean        running = true;
+    private int                     port = 8080;
 
-    /*
-    public static void main(String[] args) {
-        SimpleWebServer server = new SimpleWebServer();
-
-        server.addServlet(new TestServlet(), "/test");
-        server.addServlet(new ResourceServlet(), "/resources/*");
-        server.addServlet(new ForumServlet(), "/");
-
-        server.start();
-    }*/
-
-    private SimpleServletContext context;
-    private int sessionId = 1;
-    private Thread serverThread;
-    private volatile boolean running = true;
     private SortedMap<String, HttpServlet> servlets = new TreeMap<String, HttpServlet>(new Comparator<String>() {
         public int compare(String o1, String o2) {
             int result = 0;
@@ -45,9 +35,10 @@ public class SimpleWebServer extends Thread {
 
     private Map<String, SimpleHttpSession> sessions = new ConcurrentHashMap<String, SimpleHttpSession>(new HashMap<String, SimpleHttpSession>());
 
-    public SimpleWebServer () {
-        serverThread = new Thread(this);
-        context = new SimpleServletContext(this);
+    public SimpleWebServer (int port) {
+        this.serverThread = new Thread(this);
+        this.context = new SimpleServletContext(this);
+        this.port = port;
     }
 
     public void start() {
@@ -58,15 +49,18 @@ public class SimpleWebServer extends Thread {
 
             serverThread.start();
         } catch (ServletException e) {
-            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            throw new IllegalStateException(e);
         }
+    }
+
+    public void stop() {
+        running = false;
     }
 
     public void run() {
         try {
-            //ServerSocket serverSocket = new ServerSocket(8090);
             ServerSocketChannel ssc = ServerSocketChannel.open();
-            InetSocketAddress isa = new InetSocketAddress(8080);
+            InetSocketAddress isa = new InetSocketAddress(port);
             ssc.socket().bind(isa);
 
             try {
@@ -92,10 +86,6 @@ public class SimpleWebServer extends Thread {
             e.printStackTrace();
         }
 
-    }
-
-    public void addServlet(HttpServlet servlet) {
-        addServlet(servlet, null);
     }
 
     public void addServlet(HttpServlet servlet, String uri) {

@@ -52,7 +52,7 @@ public class TestSimpleServlet {
         return result;
     }
 
-    private void postToURL(String u) throws IOException {
+    private void postToURL(String u, String data) throws IOException {
         URL url = new URL(u);
 
         URLConnection connection = url.openConnection();
@@ -62,7 +62,7 @@ public class TestSimpleServlet {
         try {
             out = new OutputStreamWriter(connection.getOutputStream());
 
-            out.write(u);
+            out.write(data);
         } finally {
             if (out != null) {
                 out.close();
@@ -115,7 +115,7 @@ public class TestSimpleServlet {
 
         String result = readURL("http://localhost:9999/test");
 
-        postToURL("switch=true");
+        postToURL("http://localhost:9999/test", "switch=true");
 
         String result2 = readURL("http://localhost:9999/test");
 

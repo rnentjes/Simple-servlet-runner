@@ -8,11 +8,10 @@ import javax.servlet.http.HttpSession;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.CookieStore;
 import java.net.URLDecoder;
 import java.security.Principal;
-import java.util.Enumeration;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 
 /**
  * User: rnentjes
@@ -32,6 +31,7 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     private SimpleWebServer server;
     private String contentType;
     private int contentLength = -1;
+    private Cookie [] cookies;
 
     public SimpleHttpRequest(SimpleWebServer server, HttpMethod httpMethod, String requestString, boolean http11) {
         this.server = server;
@@ -41,6 +41,7 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
         this.headersRead = false;
         this.keepAlive = http11;
         this.contentType = "";
+        this.cookies = new Cookie[0];
 
         int qmloc = requestString.indexOf('?');
 
@@ -66,7 +67,7 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
         } else {
             contentLength = 0;
         }
-        addCookie(headers.get(HttpHeader.COOKIE));
+        parseCookies(headers.get(HttpHeader.COOKIE));
         contentType = headers.get(HttpHeader.CONTENT_TYPE);
     }
 
@@ -99,20 +100,24 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
         }
     }
 
-    private void addCookie(String in) {
+    private void parseCookies(String in) {
+        Set<Cookie> cookies = new HashSet<Cookie>();
         if (in != null) {
             String [] parts = in.split("\\;");
 
             for (String part : parts) {
-                String [] sp = part.split("\\=");
+                String [] sp = part.trim().split("\\=");
 
                 if (sp.length == 2) {
                     if (sp[0].trim().equals(SESSION_COOKIE)) {
                         session = server.getSession(sp[1]);
+                    } else {
+                        cookies.add(new Cookie(sp[0], sp[1]));
                     }
                 }
             }
         }
+        this.cookies = cookies.toArray(new Cookie[0]);
     }
 
     HttpMethod getHttpMethod() {
@@ -128,7 +133,7 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     }
 
     public Cookie[] getCookies() {
-        return new Cookie[0];  //To change body of implemented methods use File | Settings | File Templates.
+        return this.cookies;
     }
 
     public long getDateHeader(String s) {

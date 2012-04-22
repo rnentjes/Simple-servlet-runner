@@ -6,9 +6,8 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 /**
  * User: rnentjes
@@ -21,6 +20,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
     private int responseCode;
     private String errorMessage;
     private Map<String, String> headers;
+    private Set<Cookie> cookies;
     private Map<Integer, String> responseMessages;
     private SimpleWebServer server;
 
@@ -36,6 +36,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
         this.contentType = "text/html";
 
         this.headers = new HashMap<String, String>();
+        this.cookies = new HashSet<Cookie>();
         this.responseMessages = new HashMap<Integer, String>();
 
         responseMessages.put(200, "OK");
@@ -69,13 +70,33 @@ public class SimpleHttpResponse implements HttpServletResponse {
         output.writeBytes("\r\n");
 
         //Set-Cookie: name2=value2; Expires=Wed, 09 Jun 2021 10:18:14 GMT
+
         if (request != null && request.getSessionId() != null) {
             output.writeBytes("Set-Cookie: ");
             output.writeBytes(SimpleHttpRequest.SESSION_COOKIE);
             output.writeBytes("=");
             output.writeBytes(request.getSessionId());
+
             output.writeBytes("\r\n");
         }
+
+        SimpleDateFormat expiresFormatter = new SimpleDateFormat("EEE, dd-MMM-yyyy HH:mm:ss zzz");
+        expiresFormatter.setTimeZone(new SimpleTimeZone(0, "GMT"));
+
+        for (Cookie cookie : cookies) {
+            output.writeBytes("Set-Cookie: ");
+            output.writeBytes(cookie.getName());
+            output.writeBytes("=");
+            output.writeBytes(cookie.getValue());
+
+            if (cookie.getMaxAge() > -1) {
+                Date expires = new Date(System.currentTimeMillis() + cookie.getMaxAge() * 1000L);
+                output.writeBytes("; Expires="+expiresFormatter.format(expires));
+            }
+
+            output.writeBytes("\r\n");
+        }
+
 
         output.writeBytes("Connection: keep-alive\r\n");
         output.writeBytes("\r\n");
@@ -93,7 +114,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
 
     public void addCookie(Cookie cookie) {
-        //To change body of implemented methods use File | Settings | File Templates.
+        cookies.add(cookie);
     }
 
     public boolean containsHeader(String s) {

@@ -2,10 +2,10 @@ package nl.astraeus.http;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpSession;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.channels.SocketChannel;
@@ -19,7 +19,7 @@ import java.util.*;
  * Date: 4/3/12
  * Time: 7:38 PM
  */
-public class SimpleRequestThread implements Runnable {
+public class ConnectionHandler {
 
     private final static int LINE_BUFFER_SIZE = 1024;
 
@@ -33,7 +33,7 @@ public class SimpleRequestThread implements Runnable {
     private SimpleWebServer server;
 
     private Charset isoCharset = Charset.forName("ISO-8859-1");
-    private Charset charset = Charset.forName("UTF-8");
+    private static Charset charset = Charset.forName("UTF-8");
     private CharsetEncoder encoder = charset.newEncoder();
     private CharsetDecoder decoder = charset.newDecoder();
 
@@ -50,7 +50,7 @@ public class SimpleRequestThread implements Runnable {
     private byte [] inarray = inBuffer.array();
 
 
-    public SimpleRequestThread(SimpleWebServer server, SocketChannel sc) throws UnknownHostException, IOException {
+    public ConnectionHandler(SimpleWebServer server, SocketChannel sc) {
         this.server = server;
         this.sc = sc;
     }
@@ -66,12 +66,58 @@ public class SimpleRequestThread implements Runnable {
         return result;
     }
 
-    private byte [] getHeader = "GET ".getBytes(charset);
-    private byte [] postHeader = "POST ".getBytes(charset);
-    private byte [] contentLengthHeader = "_ontent-_ength: ".getBytes(charset);
-    private byte [] connectionHeader    = "_onnection: ".getBytes(charset);
-    private byte [] cookieHeader        = "_ookie: ".getBytes(charset);
-    private byte [] contentTypeHeader   = "_ontent-_ype: ".getBytes(charset);
+    //private byte [] getHeader = "GET ".getBytes(charset);
+    //private byte [] postHeader = "POST ".getBytes(charset);
+    private static byte [] contentLengthHeader = "_ontent-_ength: ".getBytes(charset);
+    private static byte [] connectionHeader    = "_onnection: ".getBytes(charset);
+    private static byte [] cookieHeader        = "_ookie: ".getBytes(charset);
+    private static byte [] contentTypeHeader   = "_ontent-_ype: ".getBytes(charset);
+
+    private static Map<HttpHeader, byte[]> headers;
+
+    static {
+        //headers.put(HttpHeader.GET, getHeader);
+        //headers.put(HttpHeader.POST, postHeader);
+        headers = new HashMap<HttpHeader, byte[]>();
+
+        headers.put(HttpHeader.CONTENT_LENGTH, contentLengthHeader);
+        headers.put(HttpHeader.CONTENT_TYPE, contentTypeHeader);
+        headers.put(HttpHeader.COOKIE, cookieHeader);
+        headers.put(HttpHeader.CONNECTION, connectionHeader);
+    }
+
+    private Map.Entry<HttpHeader, String> findHeader2(byte[] bytes, int offset, int len) {
+        Map.Entry<HttpHeader, String> result = null;
+
+        int index = 0;
+        Set<HttpHeader> remaining = new HashSet<HttpHeader>(headers.keySet());
+
+        while (index < len && remaining.size() > 1) {
+            Iterator<HttpHeader> it = remaining.iterator();
+            byte currentByte = bytes[offset+index];
+
+            while (it.hasNext()) {
+                HttpHeader header = it.next();
+                byte [] headerBytes = headers.get(header);
+
+                if (currentByte != headerBytes[index] && headerBytes[index] != '_') {
+                    it.remove();
+                }
+            }
+
+            index++;
+        }
+
+        if (remaining.size() == 1) {
+            HttpHeader header = remaining.iterator().next();
+            byte [] headerBytes = headers.get(header);
+
+            String value = new String(bytes, offset + headerBytes.length, len - headerBytes.length, charset);
+            result = new AbstractMap.SimpleEntry<HttpHeader, String>(header, value);
+        }
+
+        return result;
+    }
 
     private String checkMatch(byte[] bytes, int offset, int len, byte [] target) {
         String result = null;
@@ -181,7 +227,7 @@ public class SimpleRequestThread implements Runnable {
                             }
                             first = false;
                         } else {
-                            header = findHeader(inarray, inBuffer.position(), (p - inBuffer.position()) -1);
+                            header = findHeader2(inarray, inBuffer.position(), (p - inBuffer.position()) - 1);
                         }
 
                         inBuffer.position(p + 1);
@@ -232,35 +278,6 @@ public class SimpleRequestThread implements Runnable {
 
         return response.toString().split("\r\n");
     }
-
-    /*
-    private String [] readHeaders(ByteBuffer in, SocketChannel sc) throws IOException {
-        boolean done = false;
-        int bytes = -1;
-        StringBuilder response = new StringBuilder();
-        chars.clear();
-
-        while(!done && (bytes = sc.read(in)) != -1) {
-            in.flip();
-
-            decoder.decode(in, chars, false);
-
-            chars.flip();
-
-            String tmp = new String(chararray, chars.position(), chars.remaining());
-
-            if (tmp.endsWith("\r\n\r\n")) {
-                done = true;
-            }
-
-            in.compact();
-            chars.clear();
-
-            response.append(tmp);
-        }
-
-        return response.toString().split("\r\n");
-    }*/
 
     private String readRemaining(ByteBuffer in, SocketChannel sc)throws IOException {
         int bytes = -1;
@@ -384,16 +401,6 @@ public class SimpleRequestThread implements Runnable {
         return result.toString();
     }
 
-    /*
-    chars.clear();
-
-        decoder.decode(in, chars, false);
-
-        chars.flip();
-
-        String tmp = new String(chararray, chars.position(), chars.remaining());
-*/
-
     //inarray
     //String tmp = new String(inarray, inBuffer.position(), inBuffer.position()+index)
     // inBuffer setPosition();
@@ -444,6 +451,19 @@ public class SimpleRequestThread implements Runnable {
         return result.toString();
     }
 
+    void readMultiPartFormData(ByteBuffer in, SocketChannel sc, SimpleHttpRequest request) {
+        int size = request.getContentLength();
+
+        String boundary = request.getContentType().substring("multipart/form-data; boundary=".length());
+
+        byte [] boundaryBytes = boundary.getBytes(charset);
+
+        int boundaryMatchIndex = 0;
+
+
+
+    }
+
 
 
     private String readCharacters(ByteBuffer in, SocketChannel sc, int size) throws IOException {
@@ -467,8 +487,7 @@ public class SimpleRequestThread implements Runnable {
         return new String(result, charset);
     }
 
-    public void run() {
-
+    public void handle() {
         try {
             ByteBuffer outBuffer = ByteBuffer.allocate(OUT_BUFFER);
 
@@ -501,14 +520,17 @@ public class SimpleRequestThread implements Runnable {
                     } else if ((in = headers.get(HttpHeader.POST)) != null) {
                         if (in.endsWith(HTTP_1_1)) {
                             request = new SimpleHttpRequest(server, HttpMethod.POST, in.substring(0, in.length() - HTTP_1_1.length()), true);
-                            request.readHeaders(headers);
-                            request.parseRequestParameters(readCharacters(inBuffer, sc, request.getContentLength()));
                         } else if (in.endsWith(HTTP_1_0)) {
                             request = new SimpleHttpRequest(server, HttpMethod.POST, in.substring(0, in.length() - HTTP_1_0.length()), false);
-                            request.readHeaders(headers);
-                            request.parseRequestParameters(readCharacters(inBuffer, sc, request.getContentLength()));
                         } else {
                             throw new IllegalStateException("Don't know how to handle: [" + in + "]");
+                        }
+
+                        request.readHeaders(headers);
+                        if (request.isMultiPartFormData()) {
+                            readMultiPartFormData(inBuffer, sc, request);
+                        } else {
+                            request.parseRequestParameters(readCharacters(inBuffer, sc, request.getContentLength()));
                         }
                     }
                 }
@@ -592,6 +614,5 @@ public class SimpleRequestThread implements Runnable {
         }
 
     }
-
 
 }

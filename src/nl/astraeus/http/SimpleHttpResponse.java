@@ -33,7 +33,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
         this.responseCode = 200;
         this.errorMessage = "";
 
-        this.contentType = "text/html";
+        this.contentType = "text/html; charset=utf-8";
 
         this.headers = new HashMap<String, String>();
         this.cookies = new HashSet<Cookie>();
@@ -50,6 +50,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
         } else {
             output.writeBytes("HTTP/1.0 ");
         }
+
         output.writeBytes(Integer.toString(responseCode));
         output.writeBytes(" ");
         output.writeBytes(getResponseCode());
@@ -63,10 +64,6 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
         output.writeBytes("Content-Type: ");
         output.writeBytes(getContentType());
-        output.writeBytes("\r\n");
-
-        output.writeBytes("Content-Length: ");
-        output.writeBytes(Integer.toString(outputStream.length()));
         output.writeBytes("\r\n");
 
         //Set-Cookie: name2=value2; Expires=Wed, 09 Jun 2021 10:18:14 GMT
@@ -97,8 +94,11 @@ public class SimpleHttpResponse implements HttpServletResponse {
             output.writeBytes("\r\n");
         }
 
-
         output.writeBytes("Connection: keep-alive\r\n");
+
+        output.writeBytes("Content-Length: ");
+        output.writeBytes(Integer.toString(outputStream.length()));
+        output.writeBytes("\r\n");
         output.writeBytes("\r\n");
     }
 
@@ -111,7 +111,6 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
         return result;
     }
-
 
     public void addCookie(Cookie cookie) {
         cookies.add(cookie);

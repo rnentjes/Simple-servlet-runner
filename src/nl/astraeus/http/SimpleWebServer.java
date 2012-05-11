@@ -2,12 +2,15 @@ package nl.astraeus.http;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
-import java.io.IOException;
-import java.net.*;
+import java.net.BindException;
+import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * User: rnentjes
@@ -19,6 +22,10 @@ public class SimpleWebServer implements Runnable {
     private Thread                  serverThread;
     private volatile boolean        running = true;
     private int                     port = 8080;
+    private int numberOfConnections = 25;
+
+    private BlockingQueue<ConnectionHandler> jobQueue = new LinkedBlockingQueue<ConnectionHandler>(25);
+    private List<ConnectionHandlerThread> availableThreads = new LinkedList<ConnectionHandlerThread>();
 
     private SortedMap<String, HttpServlet> servlets = new TreeMap<String, HttpServlet>(new Comparator<String>() {
         public int compare(String o1, String o2) {
@@ -58,6 +65,36 @@ public class SimpleWebServer implements Runnable {
         serverThread.interrupt();
     }
 
+    private void handleConnection(ConnectionHandler ch) {
+        boolean done = false;
+
+        try {
+            int size = 0;
+
+            synchronized (availableThreads) {
+                size = availableThreads.size();
+            }
+
+            while(size++ < numberOfConnections) {
+                ConnectionHandlerThread t = new ConnectionHandlerThread(this, "ConnectionHandlerThread "+(availableThreads.size()+1), jobQueue);
+
+                synchronized (availableThreads) {
+                    availableThreads.add(t);
+                }
+
+                System.out.println("Started new connection Thread");
+
+                t.start();
+            }
+
+            if (!jobQueue.offer(ch, 10000, TimeUnit.MILLISECONDS)) {
+                System.out.println("Couldn't handle job!");
+            }
+        } catch (InterruptedException e) {
+            // ignore
+        }
+    }
+
     public void run() {
         try {
             ServerSocketChannel ssc = ServerSocketChannel.open();
@@ -67,15 +104,10 @@ public class SimpleWebServer implements Runnable {
             try {
                 while (running) {
                     SocketChannel sc = ssc.accept();
-                    try {
 
-                        //new SimpleRequestThread(sock).run();
-                        Thread thread = new Thread(new SimpleRequestThread(this, sc));
+                    ConnectionHandler handler = new ConnectionHandler(this, sc);
 
-                        thread.start();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    handleConnection(handler);
                 }
             } finally {
                 ssc.close();//always close the ServerSocket
@@ -159,5 +191,19 @@ public class SimpleWebServer implements Runnable {
 
     int getPort() {
         return port;
+    }
+
+    public void removeThread(ConnectionHandlerThread connectionHandlerThread) {
+        Throwable e = new Throwable("Thread stopped running.");
+
+        removeThread(connectionHandlerThread, e);
+    }
+
+    public void removeThread(ConnectionHandlerThread connectionHandlerThread, Throwable e) {
+        System.out.println("Removing thread "+connectionHandlerThread.getName()+"; "+e.getMessage());
+
+        synchronized(availableThreads) {
+            availableThreads.remove(connectionHandlerThread);
+        }
     }
 }

@@ -1,13 +1,5 @@
 package nl.astraeus.http;
 
-import javax.servlet.RequestDispatcher;
-import javax.servlet.Servlet;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.*;
 
 /**
@@ -50,7 +42,7 @@ abstract class AttributeParameterHolder {
             parameters.put(name, values);
         } else {
             String [] newValues = Arrays.copyOf(values, values.length+1);
-            newValues[newValues.length] = value;
+            newValues[newValues.length-1] = value;
             parameters.put(name, newValues);
         }
     }
@@ -118,4 +110,5 @@ abstract class AttributeParameterHolder {
     public void removeAttribute(String s) {
         attributes.remove(s);
     }
+
 }

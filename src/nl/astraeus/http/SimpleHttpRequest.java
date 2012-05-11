@@ -8,8 +8,9 @@ import javax.servlet.http.HttpSession;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.net.CookieStore;
 import java.net.URLDecoder;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.security.Principal;
 import java.util.*;
 
@@ -27,11 +28,13 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     private boolean http11;
     private boolean headersRead;
     private boolean keepAlive;
+    private boolean multiPartFormData;
     private SimpleHttpSession session;
     private SimpleWebServer server;
     private String contentType;
     private int contentLength = -1;
     private Cookie [] cookies;
+
 
     public SimpleHttpRequest(SimpleWebServer server, HttpMethod httpMethod, String requestString, boolean http11) {
         this.server = server;
@@ -58,6 +61,10 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
         return headersRead;
     }
 
+    boolean isMultiPartFormData() {
+        return multiPartFormData;
+    }
+
     void readHeaders(Map<HttpHeader, String> headers) throws IOException {
         headersRead = true;
 
@@ -69,6 +76,8 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
         }
         parseCookies(headers.get(HttpHeader.COOKIE));
         contentType = headers.get(HttpHeader.CONTENT_TYPE);
+
+        multiPartFormData = contentType != null && contentType.contains("multipart/form-data;");
     }
 
     void parseRequestParameters(String formdata) throws UnsupportedEncodingException {

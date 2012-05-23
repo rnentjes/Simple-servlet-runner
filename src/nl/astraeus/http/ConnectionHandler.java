@@ -217,6 +217,7 @@ public class ConnectionHandler {
                         found = true;
 
                         if ((inBuffer.position() - p) == -1) {
+                            inBuffer.position(p+1);
                             done = true;
                         } else if (first) {
                             String postGet = createString(inarray, inBuffer.position(), (p - inBuffer.position()) -1);

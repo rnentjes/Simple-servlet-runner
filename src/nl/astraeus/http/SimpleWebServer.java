@@ -39,6 +39,14 @@ public class SimpleWebServer implements Runnable {
         }
     });
 
+    public int getNumberOfConnections() {
+        return numberOfConnections;
+    }
+
+    public void setNumberOfConnections(int numberOfConnections) {
+        this.numberOfConnections = numberOfConnections;
+    }
+
     private Map<String, SimpleHttpSession> sessions = new ConcurrentHashMap<String, SimpleHttpSession>(new HashMap<String, SimpleHttpSession>());
 
     public SimpleWebServer (int port) {
@@ -54,6 +62,21 @@ public class SimpleWebServer implements Runnable {
             }
 
             serverThread.start();
+
+            int size = 0;
+            while(size++ < numberOfConnections) {
+                ConnectionHandlerThread t = new ConnectionHandlerThread(this, "ConnectionHandlerThread "+(availableThreads.size()+1), jobQueue);
+
+                synchronized (availableThreads) {
+                    availableThreads.add(t);
+                }
+
+                System.out.println("Started new connection Thread "+t);
+
+                t.start();
+            }
+
+
         } catch (ServletException e) {
             throw new IllegalStateException(e);
         }
@@ -82,7 +105,7 @@ public class SimpleWebServer implements Runnable {
                     availableThreads.add(t);
                 }
 
-                System.out.println("Started new connection Thread");
+                System.out.println("Started new connection Thread "+t);
 
                 t.start();
             }

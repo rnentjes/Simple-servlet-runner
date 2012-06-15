@@ -5,9 +5,14 @@ import javax.servlet.http.HttpServlet;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.channels.ByteChannel;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
@@ -30,6 +35,7 @@ public class ConnectionHandler {
     private static int IN_BUFFER  = 1 << 14;
 
     private SocketChannel sc;
+    private ReadableByteChannel byteChannel;
     private SimpleWebServer server;
 
     private Charset isoCharset = Charset.forName("ISO-8859-1");
@@ -182,13 +188,13 @@ public class ConnectionHandler {
         int result;
 
         in.clear();
-        result = sc.read(in);
+        result = byteChannel.read(in);
         in.flip();
 
         return result;
     }
 
-    private Map<HttpHeader, String> readHeaders(ByteBuffer in, SocketChannel sc) throws IOException {
+    private Map<HttpHeader, String> readHeaders(ByteBuffer in, ReadableByteChannel sc) throws IOException {
         boolean done = false;
         boolean first = true;
         Map<HttpHeader, String> headers = new HashMap<HttpHeader, String>();
@@ -452,7 +458,7 @@ public class ConnectionHandler {
         return result.toString();
     }
 
-    void readMultiPartFormData(ByteBuffer in, SocketChannel sc, SimpleHttpRequest request) {
+    void readMultiPartFormData(ByteBuffer in, ReadableByteChannel sc, SimpleHttpRequest request) {
         int size = request.getContentLength();
 
         String boundary = request.getContentType().substring("multipart/form-data; boundary=".length());
@@ -462,12 +468,10 @@ public class ConnectionHandler {
         int boundaryMatchIndex = 0;
 
 
-
     }
 
 
-
-    private String readCharacters(ByteBuffer in, SocketChannel sc, int size) throws IOException {
+    private String readCharacters(ByteBuffer in, ReadableByteChannel sc, int size) throws IOException {
         byte [] result = new byte[size];
         int index = 0;
 
@@ -496,8 +500,12 @@ public class ConnectionHandler {
             inBuffer.flip();
             outBuffer.clear();
 
+            sc.socket().setSoTimeout(100);
+            InputStream inStream = sc.socket().getInputStream();
+            byteChannel = Channels.newChannel(inStream);
+
             while (running && keepalive) {
-                Map<HttpHeader, String> headers = readHeaders(inBuffer, sc);
+                Map<HttpHeader, String> headers = readHeaders(inBuffer, byteChannel);
 
                 keepalive = false;
 
@@ -514,10 +522,11 @@ public class ConnectionHandler {
                             request.readHeaders(headers);
                         } else if (in.endsWith(HTTP_1_0)) {
                             request = new SimpleHttpRequest(server, HttpMethod.GET, in.substring(0, in.length() - HTTP_1_0.length()), false);
-                            request.readHeaders(headers);
                         } else {
                             throw new IllegalStateException("Don't know how to handle: [" + in + "]");
                         }
+
+                        request.readHeaders(headers);
                     } else if ((in = headers.get(HttpHeader.POST)) != null) {
                         if (in.endsWith(HTTP_1_1)) {
                             request = new SimpleHttpRequest(server, HttpMethod.POST, in.substring(0, in.length() - HTTP_1_1.length()), true);
@@ -529,16 +538,16 @@ public class ConnectionHandler {
 
                         request.readHeaders(headers);
                         if (request.isMultiPartFormData()) {
-                            readMultiPartFormData(inBuffer, sc, request);
+                            readMultiPartFormData(inBuffer, byteChannel, request);
                         } else {
-                            request.parseRequestParameters(readCharacters(inBuffer, sc, request.getContentLength()));
+                            request.parseRequestParameters(readCharacters(inBuffer, byteChannel, request.getContentLength()));
                         }
                     }
                 }
 
                 if (request == null) {
                     response = new SimpleHttpResponse(server);
-                    response.sendError(404, "Unknown request type (only GET supported!)");
+                    response.sendError(404, "Unknown request type (only GET/POST supported!)");
                 } else {
                     keepalive = request.getKeepAlive();
 
@@ -575,14 +584,16 @@ public class ConnectionHandler {
                     }
                 }
             }
+        } catch (SocketTimeoutException e) {
+            // ignore
         } catch (ServletException e) {
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
             try {
-                if (sc != null) {
-                    sc.close();
+                if (byteChannel != null) {
+                    byteChannel.close();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -590,7 +601,7 @@ public class ConnectionHandler {
         }
     }
 
-    private void writeBytesToChannel(byte [] bytes, ByteBuffer outBuffer, SocketChannel sc) throws IOException {
+    private void writeBytesToChannel(byte [] bytes, ByteBuffer outBuffer, ByteChannel sc) throws IOException {
         int offset = 0;
 
         while(offset < bytes.length) {

@@ -43,8 +43,6 @@ public class ConnectionHandlerThread extends Thread {
                         try {
                             handling = true;
 
-                            System.out.println("Handling: ("+Thread.currentThread().getId()+")"+currentJob);
-
                             currentJob.handle();
                         } finally {
                             handling = false;

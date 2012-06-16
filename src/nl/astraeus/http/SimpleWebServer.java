@@ -71,7 +71,7 @@ public class SimpleWebServer implements Runnable {
                     availableThreads.add(t);
                 }
 
-                System.out.println("Started new connection Thread "+t);
+                //System.out.println("Started new connection Thread "+t);
 
                 t.start();
             }

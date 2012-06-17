@@ -10,7 +10,6 @@ import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * User: rnentjes
@@ -20,12 +19,14 @@ import java.util.concurrent.TimeUnit;
 public class SimpleWebServer implements Runnable {
     private SimpleServletContext    context;
     private Thread                  serverThread;
-    private volatile boolean        running = true;
-    private int                     port = 8080;
-    private int numberOfConnections = 25;
+    protected volatile boolean      running = true;
+    protected int                   port = 8080;
+    private int                     numberOfConnections = 25;
+    private boolean                 supportKeelAlive = false;
+    private int                     threadNumber = 0;
 
     private BlockingQueue<ConnectionHandler> jobQueue = new LinkedBlockingQueue<ConnectionHandler>(25);
-    private List<ConnectionHandlerThread> availableThreads = new LinkedList<ConnectionHandlerThread>();
+    private final List<ConnectionHandlerThread> availableThreads = new LinkedList<ConnectionHandlerThread>();
 
     private SortedMap<String, HttpServlet> servlets = new TreeMap<String, HttpServlet>(new Comparator<String>() {
         public int compare(String o1, String o2) {
@@ -63,19 +64,12 @@ public class SimpleWebServer implements Runnable {
 
             serverThread.start();
 
-            int size = 0;
-            while(size++ < numberOfConnections) {
-                ConnectionHandlerThread t = new ConnectionHandlerThread(this, "ConnectionHandlerThread "+(availableThreads.size()+1), jobQueue);
+            createHandlersIfNeeded();
 
-                synchronized (availableThreads) {
-                    availableThreads.add(t);
-                }
+            Thread reaper = new Thread(new IdleConnectionReaper(this));
 
-                //System.out.println("Started new connection Thread "+t);
-
-                t.start();
-            }
-
+            reaper.setDaemon(true);
+            reaper.start();
 
         } catch (ServletException e) {
             throw new IllegalStateException(e);
@@ -88,33 +82,38 @@ public class SimpleWebServer implements Runnable {
         serverThread.interrupt();
     }
 
+    private void createHandlersIfNeeded() {
+        int size = 0;
+
+        synchronized (availableThreads) {
+            size = availableThreads.size();
+        }
+
+        while(size++ < numberOfConnections) {
+            ConnectionHandlerThread t = new ConnectionHandlerThread(this, "ConnectionHandlerThread "+(++threadNumber), jobQueue);
+
+            synchronized (availableThreads) {
+                availableThreads.add(t);
+            }
+
+            System.out.println("Started new connection Thread "+t);
+
+            t.setDaemon(true);
+            t.start();
+        }
+    }
+
     private void handleConnection(ConnectionHandler ch) {
         boolean done = false;
 
-        try {
-            int size = 0;
+        createHandlersIfNeeded();
 
-            synchronized (availableThreads) {
-                size = availableThreads.size();
-            }
+        if (!jobQueue.offer(ch)) {
+            System.out.println("Couldn't handle job!");
 
-            while(size++ < numberOfConnections) {
-                ConnectionHandlerThread t = new ConnectionHandlerThread(this, "ConnectionHandlerThread "+(availableThreads.size()+1), jobQueue);
+            createHandlersIfNeeded();
 
-                synchronized (availableThreads) {
-                    availableThreads.add(t);
-                }
-
-                System.out.println("Started new connection Thread "+t);
-
-                t.start();
-            }
-
-            if (!jobQueue.offer(ch, 10000, TimeUnit.MILLISECONDS)) {
-                System.out.println("Couldn't handle job!");
-            }
-        } catch (InterruptedException e) {
-            // ignore
+            ch.writeServerError();
         }
     }
 
@@ -216,8 +215,16 @@ public class SimpleWebServer implements Runnable {
         return port;
     }
 
+    public boolean isSupportKeepAlive() {
+        return supportKeelAlive;
+    }
+
+    public void setSupportKeelAlive(boolean supportKeelAlive) {
+        this.supportKeelAlive = supportKeelAlive;
+    }
+
     public void removeThread(ConnectionHandlerThread connectionHandlerThread) {
-        Throwable e = new Throwable("Thread stopped running.");
+        Throwable e = new Throwable("Thread stopped running: "+Thread.currentThread());
 
         removeThread(connectionHandlerThread, e);
     }
@@ -228,5 +235,17 @@ public class SimpleWebServer implements Runnable {
         synchronized(availableThreads) {
             availableThreads.remove(connectionHandlerThread);
         }
+
+        createHandlersIfNeeded();
+    }
+
+    public List<ConnectionHandlerThread> getThreads() {
+        List<ConnectionHandlerThread> result = new LinkedList<ConnectionHandlerThread>();
+
+        synchronized (availableThreads) {
+            result.addAll(availableThreads);
+        }
+
+        return result;
     }
 }

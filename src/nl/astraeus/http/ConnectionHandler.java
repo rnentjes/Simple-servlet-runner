@@ -2,18 +2,15 @@ package nl.astraeus.http;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
-import java.nio.channels.ByteChannel;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
@@ -500,7 +497,7 @@ public class ConnectionHandler {
             inBuffer.flip();
             outBuffer.clear();
 
-            sc.socket().setSoTimeout(100);
+            sc.socket().setSoTimeout(1000);
             InputStream inStream = sc.socket().getInputStream();
             byteChannel = Channels.newChannel(inStream);
 
@@ -549,7 +546,7 @@ public class ConnectionHandler {
                     response = new SimpleHttpResponse(server);
                     response.sendError(404, "Unknown request type (only GET/POST supported!)");
                 } else {
-                    keepalive = request.getKeepAlive();
+                    keepalive = request.getKeepAlive() && server.isSupportKeepAlive();
 
                     HttpServlet servlet = server.findHandlingServlet(request.getRequestURI());
 
@@ -585,13 +582,18 @@ public class ConnectionHandler {
                 }
             }
         } catch (SocketTimeoutException e) {
-            // ignore
+            // timeout, ignore
         } catch (ServletException e) {
             e.printStackTrace();
         } catch (IOException e) {
-            e.printStackTrace();
+            if (!e.getMessage().contains("Broken pipe")) {
+                e.printStackTrace();
+            } else {
+                System.out.println(e.getMessage());
+            }
         } finally {
             try {
+                sc.close();
                 if (byteChannel != null) {
                     byteChannel.close();
                 }
@@ -601,8 +603,12 @@ public class ConnectionHandler {
         }
     }
 
-    private void writeBytesToChannel(byte [] bytes, ByteBuffer outBuffer, ByteChannel sc) throws IOException {
+    private void writeBytesToChannel(byte [] bytes, ByteBuffer outBuffer, SocketChannel sc) throws IOException {
         int offset = 0;
+
+        sc.socket().setSoTimeout(1000);
+        OutputStream outStream = sc.socket().getOutputStream();
+        WritableByteChannel outChannel = Channels.newChannel(outStream);
 
         while(offset < bytes.length) {
             int length = OUT_BUFFER;
@@ -617,14 +623,44 @@ public class ConnectionHandler {
             outBuffer.flip();
 
             while(outBuffer.hasRemaining()) {
-                sc.write(outBuffer);
+                outChannel.write(outBuffer);
             }
 
             outBuffer.flip();
 
             offset += OUT_BUFFER;
         }
-
     }
 
+    public void writeServerError() {
+        ByteBuffer outBuffer = ByteBuffer.allocate(1024);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(out);
+
+        try {
+            output.writeBytes("HTTP/1.0 503 Service Unavailable");
+            output.writeBytes("\r\n");
+            output.writeBytes("\r\n");
+
+            writeBytesToChannel(out.toByteArray(), outBuffer, sc);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                sc.close();
+                output.close();
+                out.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void close() {
+        try {
+            sc.close();
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
 }

@@ -53,7 +53,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
         output.writeBytes(Integer.toString(responseCode));
         output.writeBytes(" ");
-        output.writeBytes(getResponseCode());
+        output.writeBytes(getResponseMessage());
         output.writeBytes("\r\n");
 
         if (responseCode != 200) {
@@ -94,7 +94,9 @@ public class SimpleHttpResponse implements HttpServletResponse {
             output.writeBytes("\r\n");
         }
 
-        output.writeBytes("Connection: keep-alive\r\n");
+        if (request.getKeepAlive() && server.isSupportKeepAlive()) {
+           output.writeBytes("Connection: keep-alive\r\n");
+        }
 
         output.writeBytes("Content-Length: ");
         output.writeBytes(Integer.toString(outputStream.length()));
@@ -102,7 +104,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
         output.writeBytes("\r\n");
     }
 
-    private String getResponseCode() {
+    private String getResponseMessage() {
         String result = responseMessages.get(responseCode);
 
         if (result == null) {

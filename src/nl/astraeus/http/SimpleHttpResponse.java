@@ -25,6 +25,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
     private SimpleWebServer server;
 
     private String contentType;
+    private String redirect = null;
 
     public SimpleHttpResponse(SimpleWebServer server) {
         this.server = server;
@@ -41,6 +42,8 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
         responseMessages.put(200, "OK");
         responseMessages.put(400, "Bad Request");
+        responseMessages.put(401, "Unauthorized");
+        responseMessages.put(403, "Forbidden");
         responseMessages.put(404, "Not Found");
     }
 
@@ -51,51 +54,59 @@ public class SimpleHttpResponse implements HttpServletResponse {
             output.writeBytes("HTTP/1.0 ");
         }
 
-        output.writeBytes(Integer.toString(responseCode));
-        output.writeBytes(" ");
-        output.writeBytes(getResponseMessage());
-        output.writeBytes("\r\n");
-
-        if (responseCode != 200) {
-            setContentType("text/plain");
-            resetBuffer();
-            getWriter().print(errorMessage);
-        }
-
-        output.writeBytes("Content-Type: ");
-        output.writeBytes(getContentType());
-        output.writeBytes("\r\n");
-
-        //Set-Cookie: name2=value2; Expires=Wed, 09 Jun 2021 10:18:14 GMT
-
-        if (request != null && request.getSessionId() != null) {
-            output.writeBytes("Set-Cookie: ");
-            output.writeBytes(SimpleHttpRequest.SESSION_COOKIE);
-            output.writeBytes("=");
-            output.writeBytes(request.getSessionId());
-
+        if (redirect != null) {
+            output.writeBytes("302 Redirect\r\n");
+            output.writeBytes("Location: ");
+            output.writeBytes(redirect);
             output.writeBytes("\r\n");
-        }
+        } else {
+            output.writeBytes(Integer.toString(responseCode));
+            output.writeBytes(" ");
 
-        SimpleDateFormat expiresFormatter = new SimpleDateFormat("EEE, dd-MMM-yyyy HH:mm:ss zzz");
-        expiresFormatter.setTimeZone(new SimpleTimeZone(0, "GMT"));
-
-        for (Cookie cookie : cookies) {
-            output.writeBytes("Set-Cookie: ");
-            output.writeBytes(cookie.getName());
-            output.writeBytes("=");
-            output.writeBytes(cookie.getValue());
-
-            if (cookie.getMaxAge() > -1) {
-                Date expires = new Date(System.currentTimeMillis() + cookie.getMaxAge() * 1000L);
-                output.writeBytes("; Expires="+expiresFormatter.format(expires));
+            if (responseCode != 200) {
+                setContentType("text/plain");
+                resetBuffer();
+                getWriter().print(errorMessage);
+            } else {
+                output.writeBytes("OK");
+                output.writeBytes("\r\n");
             }
 
+            output.writeBytes("Content-Type: ");
+            output.writeBytes(getContentType());
             output.writeBytes("\r\n");
+
+            //Set-Cookie: name2=value2; Expires=Wed, 09 Jun 2021 10:18:14 GMT
+
+            if (request != null && request.getSessionId() != null) {
+                output.writeBytes("Set-Cookie: ");
+                output.writeBytes(SimpleHttpRequest.SESSION_COOKIE);
+                output.writeBytes("=");
+                output.writeBytes(request.getSessionId());
+
+                output.writeBytes("\r\n");
+            }
+
+            SimpleDateFormat expiresFormatter = new SimpleDateFormat("EEE, dd-MMM-yyyy HH:mm:ss zzz");
+            expiresFormatter.setTimeZone(new SimpleTimeZone(0, "GMT"));
+
+            for (Cookie cookie : cookies) {
+                output.writeBytes("Set-Cookie: ");
+                output.writeBytes(cookie.getName());
+                output.writeBytes("=");
+                output.writeBytes(cookie.getValue());
+
+                if (cookie.getMaxAge() > -1) {
+                    Date expires = new Date(System.currentTimeMillis() + cookie.getMaxAge() * 1000L);
+                    output.writeBytes("; Expires=" + expiresFormatter.format(expires));
+                }
+
+                output.writeBytes("\r\n");
+            }
         }
 
-        if (request.getKeepAlive() && server.isSupportKeepAlive()) {
-           output.writeBytes("Connection: keep-alive\r\n");
+        if (request != null && request.getKeepAlive() && server.isSupportKeepAlive()) {
+            output.writeBytes("Connection: keep-alive\r\n");
         }
 
         output.writeBytes("Content-Length: ");
@@ -108,7 +119,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
         String result = responseMessages.get(responseCode);
 
         if (result == null) {
-            result = "500 Internal Server Error";
+            result = "Internal Server Error";
         }
 
         return result;
@@ -145,10 +156,11 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
     public void sendError(int i) throws IOException {
         responseCode = i;
+        errorMessage = getResponseMessage();
     }
 
     public void sendRedirect(String s) throws IOException {
-        //To change body of implemented methods use File | Settings | File Templates.
+        redirect = s;
     }
 
     public void setDateHeader(String s, long l) {
@@ -220,10 +232,11 @@ public class SimpleHttpResponse implements HttpServletResponse {
     }
 
     public int getBufferSize() {
-        return 1<<14;
+        return 1 << 14;
     }
 
-    public void flushBuffer() throws IOException {}
+    public void flushBuffer() throws IOException {
+    }
 
     public void resetBuffer() {
         printWriter = null;

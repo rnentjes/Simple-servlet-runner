@@ -19,7 +19,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
     private PrintWriter printWriter;
     private int responseCode;
     private String errorMessage;
-    private Map<String, String> headers;
+    private Map<String, String[]> headers;
     private Set<Cookie> cookies;
     private Map<Integer, String> responseMessages;
     private SimpleWebServer server;
@@ -36,7 +36,7 @@ public class SimpleHttpResponse implements HttpServletResponse {
 
         this.contentType = "text/html; charset=utf-8";
 
-        this.headers = new HashMap<String, String>();
+        this.headers = new HashMap<String, String[]>();
         this.cookies = new HashSet<Cookie>();
         this.responseMessages = new HashMap<Integer, String>();
 
@@ -109,6 +109,23 @@ public class SimpleHttpResponse implements HttpServletResponse {
             output.writeBytes("Connection: keep-alive\r\n");
         }
 
+        for (Map.Entry<String, String[]> entry : headers.entrySet()) {
+            output.writeBytes(entry.getKey());
+            output.writeBytes(": ");
+            boolean first = true;
+
+            for (String value : entry.getValue()) {
+                if (!first) {
+                    output.writeBytes(";");
+                } else {
+                    first = false;
+                }
+
+                output.writeBytes(value);
+            }
+            output.writeBytes("\r\n");
+        }
+
         output.writeBytes("Content-Length: ");
         output.writeBytes(Integer.toString(outputStream.length()));
         output.writeBytes("\r\n");
@@ -172,11 +189,23 @@ public class SimpleHttpResponse implements HttpServletResponse {
     }
 
     public void setHeader(String s, String s1) {
-        //To change body of implemented methods use File | Settings | File Templates.
+        String [] value = new String[1];
+        value[0] = s1;
+        headers.put(s, value);
     }
 
     public void addHeader(String s, String s1) {
-        //To change body of implemented methods use File | Settings | File Templates.
+        String [] values = headers.get(s);
+
+        if (values == null) {
+            values = new String[1];
+            values[0] = s1;
+            headers.put(s, values);
+        } else {
+            String [] newValues = Arrays.copyOf(values, values.length+1);
+            newValues[newValues.length-1] = s1;
+            headers.put(s, newValues);
+        }
     }
 
     public void setIntHeader(String s, int i) {

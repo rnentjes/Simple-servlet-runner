@@ -1,4 +1,4 @@
-package nl.astraeus.http;
+package nl.astraeus.http.async;
 
 import java.util.*;
 

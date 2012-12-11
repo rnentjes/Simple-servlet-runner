@@ -140,7 +140,6 @@ public class SimpleWebServer implements Runnable {
         } catch (Throwable e) {
             e.printStackTrace();
         }
-
     }
 
     public void addServlet(HttpServlet servlet, String uri) {

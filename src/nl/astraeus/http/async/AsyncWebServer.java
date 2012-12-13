@@ -23,7 +23,7 @@ public class AsyncWebServer {
     private Set<AcceptorThread>              acceptorThreads   = new HashSet<AcceptorThread>();
     private Set<ConnectionHandlerThread>     handlerThreads    = new HashSet<ConnectionHandlerThread>();
 
-    private BlockingQueue<ConnectionCommand> queue             = new LinkedBlockingQueue<ConnectionCommand>(numberOfHandlers);
+    private BlockingQueue<ConnectionHandler> queue             = new LinkedBlockingQueue<ConnectionHandler>(numberOfHandlers);
 
     public AsyncWebServer(int port) {
         this.port = port;

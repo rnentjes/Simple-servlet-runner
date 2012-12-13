@@ -16,12 +16,12 @@ public class ConnectionHandlerThread extends Thread {
 
     private AsyncWebServer server;
 
-    private BlockingQueue<ConnectionCommand> queue;
+    private BlockingQueue<ConnectionHandler> queue;
     private volatile boolean running = false;
     private volatile boolean handling = false;
     private long lastActivity;
 
-    public ConnectionHandlerThread(AsyncWebServer server, BlockingQueue<ConnectionCommand> queue) {
+    public ConnectionHandlerThread(AsyncWebServer server, BlockingQueue<ConnectionHandler> queue) {
         super("Connection handler thread");
 
         this.server = server;
@@ -50,7 +50,7 @@ public class ConnectionHandlerThread extends Thread {
 
         try {
             try {
-                ConnectionCommand currentJob;
+                ConnectionHandler currentJob;
 
                 while (running) {
                     try {
@@ -61,7 +61,7 @@ public class ConnectionHandlerThread extends Thread {
                                 handling = true;
                                 lastActivity = System.currentTimeMillis();
 
-                                currentJob.run();
+                                currentJob.process();
                             } catch (Exception e) {
                                 logger.warn(e.getMessage(), e);
                             } finally {

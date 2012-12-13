@@ -1,6 +1,8 @@
 package nl.astraeus.http.async;
 
 import java.io.IOException;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
 
 /**
  * User: rnentjes
@@ -9,31 +11,18 @@ import java.io.IOException;
  */
 public class ConnectionCommand {
 
-    public static enum Action {
-        ACCEPT,
-        PROCESS,
-        CLOSE
-    }
-
-    private Action action;
+    private SocketChannel channel;
+    private Selector selector;
     private ConnectionHandler handler;
 
-    public ConnectionCommand(Action action, ConnectionHandler handler) {
-        this.action = action;
+    public ConnectionCommand(SocketChannel channel, Selector selector, ConnectionHandler handler) {
+        this.channel = channel;
+        this.selector = selector;
         this.handler = handler;
     }
 
     public void run() throws IOException {
-        switch(action) {
-            case ACCEPT:
-                handler.accept();
-                break;
-            case PROCESS:
-                handler.process();
-                break;
-            case CLOSE:
-                handler.close();
-                break;
-        }
+        handler.process();
     }
+
 }

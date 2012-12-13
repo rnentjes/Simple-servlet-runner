@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 
 /**
  * User: rnentjes
@@ -18,92 +18,87 @@ public class ConnectionHandler {
 
     private static int BUFFER_SIZE = 1024;
 
-    public static enum ConnectionStatus {
-        INIT,
-        ACCEPTING,
-        READING,
-        READY_TO_PROCESS,
-        PROCESSING,
-        READY_TO_WRITE,
-        WRITING,
-        CLOSING,
-        WAITING
-    }
-
-    private ConnectionStatus status = ConnectionStatus.INIT;
-
     private ByteBuffer buffer;
     private ByteArrayOutputStream out = new ByteArrayOutputStream();
+    private boolean readyToProcess = false;
 
-    public ConnectionStatus getStatus() {
-        return status;
+    private SocketChannel channel;
+    private Selector selector;
+
+    public ConnectionHandler(SocketChannel channel, Selector selector) {
+        this.channel = channel;
+        this.selector = selector;
     }
 
     public void accept() throws IOException {
-        status = ConnectionStatus.ACCEPTING;
-        try {
-            buffer = ByteBuffer.allocate(BUFFER_SIZE);
-        } finally{
-            status = ConnectionStatus.WAITING;
-        }
+        buffer = ByteBuffer.allocate(BUFFER_SIZE);
     }
 
-    public void read(SocketChannel channel) throws IOException {
-        status = ConnectionStatus.READING;
-        try {
-            buffer.rewind();
-            channel.read(buffer);
+    public void read(SelectionKey key) throws IOException {
+        SocketChannel channel = (SocketChannel) key.channel();
+        buffer.rewind();
+        channel.read(buffer);
 
-            if (buffer.limit() > 3 &&
-                    buffer.array()[buffer.position()-1] == 10 &&
-                    buffer.array()[buffer.position()-2] == 13 &&
-                    buffer.array()[buffer.position()-3] == 10 &&
-                    buffer.array()[buffer.position()-4] == 13) {
-                // done reading
-                logger.info("Done reading the headers!!!");
-                status = ConnectionStatus.READY_TO_PROCESS;
-            }
+        if (buffer.limit() > 3 &&
+                buffer.array()[buffer.position()-1] == 10 &&
+                buffer.array()[buffer.position()-2] == 13 &&
+                buffer.array()[buffer.position()-3] == 10 &&
+                buffer.array()[buffer.position()-4] == 13) {
+            // done reading
+            logger.info("Done reading the headers!!!");
 
-            out.write(buffer.array(), 0,  buffer.position());
-
-            // Show bytes on the console
-            //buffer.flip();
-//            Tank tank = clients.get(client);
-//            if (tank != null && (buffer.limit()-buffer.position()) > 0) {
-//                tank.onMessage(buffer.array(), buffer.position(), buffer.limit());
-//            }
-
-        } finally{
-            status = ConnectionStatus.WAITING;
+            readyToProcess = true;
         }
+
+        out.write(buffer.array(), 0,  buffer.position());
     }
 
     public void process() {
         logger.info("Processing!");
+        readyToProcess = false;
 
+        // todo: process
 
+        try {
+            SelectionKey key = channel.register(selector, SelectionKey.OP_WRITE, this);
+            key.selector().wakeup();
+        } catch (ClosedChannelException e) {
+            logger.warn(e.getMessage(), e);
+        }
     }
 
     public boolean isReadyToProcess() {
-        return status == ConnectionStatus.READY_TO_PROCESS;
+        return readyToProcess;
     }
 
-    public void write(SocketChannel channel) throws IOException {
-        status = ConnectionStatus.WRITING;
-        try {
+    public void write() throws IOException {
+        // chunked 0
+        out = new ByteArrayOutputStream();
 
-        } finally{
-            status = ConnectionStatus.WAITING;
-        }
-    }
+        out.write("HTTP/1.1 200 OK\r\n".getBytes());
+        out.write("Transfer-Encoding: chunked\r\n".getBytes());
+        out.write("\r\n".getBytes());
 
-    public void close() throws IOException {
-        status = ConnectionStatus.CLOSING;
-        try {
+        byte [] chunk = "This is a test".getBytes();
 
-        } finally{
-            status = ConnectionStatus.WAITING;
-        }
+        out.write((Integer.toHexString(chunk.length)+"\r\n").getBytes());
+        out.write(chunk);
+        out.write("\r\n".getBytes());
+
+        out.write("0\r\n\r\n".getBytes());
+
+        logger.info(out.toString());
+
+        channel.write(ByteBuffer.wrap(out.toByteArray()));
+
+        channel.close();
+
+//        try {
+//            SelectionKey key = channel.register(selector, SelectionKey.OP_READ, this);
+//            key.selector().wakeup();
+//        } catch (ClosedChannelException e) {
+//            logger.warn(e.getMessage(), e);
+//        }
     }
 
 }

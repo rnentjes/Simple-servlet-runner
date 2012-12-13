@@ -24,11 +24,11 @@ public class AcceptorThread extends Thread {
     private ServerSocketChannel server;
     private Selector selector;
 
-    private BlockingQueue<ConnectionCommand> queue;
+    private BlockingQueue<ConnectionHandler> queue;
 
     private Map<SocketChannel, ConnectionHandler> handlers = new HashMap<SocketChannel, ConnectionHandler>();
 
-    public AcceptorThread(ServerSocketChannel server, BlockingQueue<ConnectionCommand> queue) {
+    public AcceptorThread(ServerSocketChannel server, BlockingQueue<ConnectionHandler> queue) {
         super("Acceptor thread");
 
         this.server = server;
@@ -40,7 +40,7 @@ public class AcceptorThread extends Thread {
 
         try {
             selector = Selector.open();
-            server.register(selector, SelectionKey.OP_ACCEPT);
+            SelectionKey selectionKey = server.register(selector, SelectionKey.OP_ACCEPT);
         } catch (ClosedChannelException e) {
             throw new IllegalStateException(e);
         } catch (IOException e) {
@@ -65,46 +65,33 @@ public class AcceptorThread extends Thread {
                         if (channel != null) {
                             logger.info("Accepting connection from {}", channel.socket().toString());
 
-                            ConnectionHandler handler = new ConnectionHandler();
+                            ConnectionHandler handler = new ConnectionHandler(channel, selector);
 
-                            handlers.put(channel, handler);
+                            handler.accept();
 
                             channel.configureBlocking(false);
-                            channel.register(selector, SelectionKey.OP_READ);
-
-                            ConnectionCommand cmd = new ConnectionCommand(ConnectionCommand.Action.ACCEPT, handler);
-
-                            queue.add(cmd);
+                            key = channel.register(selector, SelectionKey.OP_READ, handler);
+                            key.selector().wakeup();
                         }
                     } else if (key.isReadable()) {
-                        SocketChannel channel = (SocketChannel) key.channel();
-
-                        logger.info("Reading from {}", channel.socket().toString());
-
-                        ConnectionHandler handler = handlers.get(channel);
-
-                        if (channel != null && handler != null) {
-                            handler.read(channel);
-
-                            if (handler.isReadyToProcess()) {
-                                ConnectionCommand cmd = new ConnectionCommand(ConnectionCommand.Action.PROCESS, handler);
-
-                                queue.add(cmd);
-                            }
-                        } else {
-                            throw new IllegalStateException("No handler found for channel: "+channel);
-                        }
-                     } else if (key.isWritable()) {
-                        SocketChannel channel = (SocketChannel) key.channel();
-
-                        logger.info("Writing to {}", channel.socket().toString());
-
-                        ConnectionHandler handler = handlers.get(channel);
+                        ConnectionHandler handler = (ConnectionHandler)key.attachment();
 
                         if (handler != null) {
-                            handler.write(channel);
+                            handler.read(key);
+
+                            if (handler.isReadyToProcess()) {
+                                queue.add(handler);
+                            }
                         } else {
-                            throw new IllegalStateException("No handler found for channel: "+channel);
+                            throw new IllegalStateException("No handler found for channel: "+key.channel());
+                        }
+                     } else if (key.isWritable()) {
+                        ConnectionHandler handler = (ConnectionHandler)key.attachment();
+
+                        if (handler != null) {
+                            handler.write();
+                        } else {
+                            throw new IllegalStateException("No handler found for channel: "+key.channel());
                         }
                     }
                 }

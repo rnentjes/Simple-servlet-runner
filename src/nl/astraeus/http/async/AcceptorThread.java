@@ -97,7 +97,7 @@ public class AcceptorThread extends Thread {
                 }
             } catch (CancelledKeyException e) {
                 logger.warn(e.getMessage(), e);
-            } catch (Exception e) {
+            } catch (IOException e) {
                 logger.error(e.getMessage(), e);
             }
         }

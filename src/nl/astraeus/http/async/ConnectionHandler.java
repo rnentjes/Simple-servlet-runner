@@ -31,15 +31,17 @@ public class ConnectionHandler {
     }
 
     public void accept() throws IOException {
+        logger.info("Accept");
         buffer = ByteBuffer.allocate(BUFFER_SIZE);
     }
 
     public void read(SelectionKey key) throws IOException {
+        logger.info("Reading");
         SocketChannel channel = (SocketChannel) key.channel();
-        buffer.rewind();
+        buffer.clear();
         channel.read(buffer);
 
-        if (buffer.limit() > 3 &&
+        if (buffer.position() > 3 &&
                 buffer.array()[buffer.position()-1] == 10 &&
                 buffer.array()[buffer.position()-2] == 13 &&
                 buffer.array()[buffer.position()-3] == 10 &&
@@ -48,6 +50,8 @@ public class ConnectionHandler {
             logger.info("Done reading the headers!!!");
 
             readyToProcess = true;
+        } else {
+
         }
 
         out.write(buffer.array(), 0,  buffer.position());
@@ -72,6 +76,7 @@ public class ConnectionHandler {
     }
 
     public void write() throws IOException {
+        logger.info("Writing");
         // chunked 0
         out = new ByteArrayOutputStream();
 
@@ -91,14 +96,12 @@ public class ConnectionHandler {
 
         channel.write(ByteBuffer.wrap(out.toByteArray()));
 
-        channel.close();
-
-//        try {
-//            SelectionKey key = channel.register(selector, SelectionKey.OP_READ, this);
-//            key.selector().wakeup();
-//        } catch (ClosedChannelException e) {
-//            logger.warn(e.getMessage(), e);
-//        }
+        try {
+            SelectionKey key = channel.register(selector, SelectionKey.OP_READ, this);
+            key.selector().wakeup();
+        } catch (ClosedChannelException e) {
+            logger.warn(e.getMessage(), e);
+        }
     }
 
 }

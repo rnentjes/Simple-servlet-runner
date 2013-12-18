@@ -28,8 +28,8 @@ public class ConnectionHandler {
     private static final String HTTP_1_0 = "HTTP/1.0";
     private static final String HTTP_1_1 = "HTTP/1.1";
 
-    private static int OUT_BUFFER = 1 << 16;
-    private static int IN_BUFFER  = 1 << 14;
+    private int OUT_BUFFER = 1 << 16;
+    private int IN_BUFFER  = 1 << 14;
 
     private SocketChannel sc;
     private ReadableByteChannel byteChannel;
@@ -49,7 +49,7 @@ public class ConnectionHandler {
     private byte [] linebuffer = new byte[LINE_BUFFER_SIZE];
     private CharBuffer chars = CharBuffer.allocate(LINE_BUFFER_SIZE);
     private char [] chararray = chars.array();
-    ByteBuffer inBuffer = ByteBuffer.allocate(IN_BUFFER);
+    private ByteBuffer inBuffer = ByteBuffer.allocate(IN_BUFFER);
     private byte [] inarray = inBuffer.array();
 
 

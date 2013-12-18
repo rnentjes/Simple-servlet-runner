@@ -1,5 +1,8 @@
 package nl.astraeus.http;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import java.net.BindException;
@@ -17,6 +20,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * Time: 7:36 PM
  */
 public class SimpleWebServer implements Runnable {
+    private final static Logger logger = LoggerFactory.getLogger(SimpleWebServer.class);
+
     private SimpleServletContext    context;
     private Thread                  serverThread;
     protected volatile boolean      running = true;
@@ -194,10 +199,12 @@ public class SimpleWebServer implements Runnable {
     }
 
     synchronized String createSessionId() {
-        String hash = Integer.toString(((Long)System.nanoTime()).hashCode());
+        String hash = Long.toString(((Long)System.nanoTime()).hashCode());
 
+        logger.info("Hash: " + hash);
         while (sessions.containsKey(hash)) {
-            hash = Integer.toString(((Long)System.nanoTime()).hashCode());
+            hash = Long.toString(((Long)System.nanoTime()).hashCode());
+            logger.info("Hash (rep): " + hash);
         }
 
         return hash;

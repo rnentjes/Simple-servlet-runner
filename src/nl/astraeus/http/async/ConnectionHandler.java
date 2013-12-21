@@ -3,10 +3,11 @@ package nl.astraeus.http.async;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 
 /**
  * User: rnentjes
@@ -16,92 +17,212 @@ import java.nio.channels.*;
 public class ConnectionHandler {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionHandler.class);
 
-    private static int BUFFER_SIZE = 1024;
+    public enum ConnectionStatus {
+        NEW,
+        ACCEPTING,
+        READING,
+        WRITING,
+        CLOSED
+    }
 
-    private ByteBuffer buffer;
-    private ByteArrayOutputStream out = new ByteArrayOutputStream();
-    private boolean readyToProcess = false;
+    private ByteBuffer in = ByteBuffer.allocate(4096);
+    private ByteBuffer out = ByteBuffer.allocate(4096);
+    private ConnectionStatus status = ConnectionStatus.NEW;
 
     private SocketChannel channel;
-    private Selector selector;
+    private SelectionKey currentKey;
+    private int headerPositionSearch = 0;
 
-    public ConnectionHandler(SocketChannel channel, Selector selector) {
+    private final long id;
+
+    private static long nextId = 0L;
+    private static synchronized long nextId() {
+        return ++nextId;
+    }
+
+    public ConnectionHandler(SocketChannel channel, SelectionKey key) {
+        this.id = nextId();
+        this.currentKey = key;
         this.channel = channel;
-        this.selector = selector;
+        this.status = ConnectionStatus.ACCEPTING;
+    }
+
+    public void setCurrentKey(SelectionKey currentKey) {
+        this.currentKey = currentKey;
+    }
+
+    public boolean isAccepting() {
+        return status == ConnectionStatus.ACCEPTING;
+    }
+
+    public boolean isReading() {
+        return status == ConnectionStatus.READING;
+    }
+
+    public boolean isWriting() {
+        return status == ConnectionStatus.WRITING;
+    }
+
+    public boolean isClosed() {
+        return status == ConnectionStatus.CLOSED;
     }
 
     public void accept() throws IOException {
         logger.info("Accept");
-        buffer = ByteBuffer.allocate(BUFFER_SIZE);
+
+        currentKey.attach(this);
+
+        setStatus(ConnectionStatus.READING);
     }
 
-    public void read(SelectionKey key) throws IOException {
-        logger.info("Reading");
-        SocketChannel channel = (SocketChannel) key.channel();
-        buffer.clear();
-        channel.read(buffer);
+    private void setStatus(ConnectionStatus status) {
+        this.status = status;
+        int interestedOps = 0;
 
-        if (buffer.position() > 3 &&
-                buffer.array()[buffer.position()-1] == 10 &&
-                buffer.array()[buffer.position()-2] == 13 &&
-                buffer.array()[buffer.position()-3] == 10 &&
-                buffer.array()[buffer.position()-4] == 13) {
-            // done reading
-            logger.info("Done reading the headers!!!");
-
-            readyToProcess = true;
-        } else {
-
+        switch(status) {
+            case ACCEPTING:
+                interestedOps = SelectionKey.OP_ACCEPT;
+                break;
+            case READING:
+                interestedOps = SelectionKey.OP_READ;
+                break;
+            case WRITING:
+                interestedOps = SelectionKey.OP_WRITE;
+                break;
+            case CLOSED:
+                return;
         }
 
-        out.write(buffer.array(), 0,  buffer.position());
-    }
-
-    public void process() {
-        logger.info("Processing!");
-        readyToProcess = false;
-
-        // todo: process
-
         try {
-            SelectionKey key = channel.register(selector, SelectionKey.OP_WRITE, this);
-            key.selector().wakeup();
+            currentKey.selector().wakeup();
+
+            if (currentKey.selector().isOpen()) {
+                SelectionKey key = channel.register(currentKey.selector(), interestedOps, this);
+                key.selector().wakeup();
+            } else {
+                logger.warn("Selector is closed: " + currentKey.selector());
+            }
         } catch (ClosedChannelException e) {
             logger.warn(e.getMessage(), e);
         }
+
     }
 
-    public boolean isReadyToProcess() {
-        return readyToProcess;
+    public void process() throws IOException {
+        logger.info("[Handler-"+id+"] ["+Thread.currentThread().getName()+"] Processing! ["+status+"]");
+
+        switch(status) {
+            case ACCEPTING:
+                accept();
+                break;
+            case READING:
+                read();
+                break;
+            case WRITING:
+                write();
+                break;
+            case CLOSED:
+                logger.warn("Trying to process closed connection!");
+                break;
+        }
+    }
+
+    private void parseIncomingRequest() {
+        logger.info("Parsing");
+    }
+
+    public void read() throws IOException {
+        logger.info("Reading");
+        boolean found = false;
+        SocketChannel channel = (SocketChannel)currentKey.channel();
+        int nr = channel.read(in);
+
+        if (nr < 0) {
+            logger.warn("Partial read! [" + new String(out.array(), 0, out.position(), "UTF-8") + "]");
+
+            close();
+
+            return;
+        } else if (nr == 0) {
+            logger.info("Empty read");
+
+            return;
+        }
+
+        // find the end of the headers
+        while(headerPositionSearch < in.position()) {
+            if (in.get(headerPositionSearch) == 10) {
+                 if (in.get(headerPositionSearch-1) == 13 &&
+                     in.get(headerPositionSearch-2) == 10 &&
+                     in.get(headerPositionSearch-3) == 13) {
+                     found = true;
+                     break;
+                 } else {
+                     headerPositionSearch++;
+                 }
+            } else if (in.get(headerPositionSearch) == 13) {
+                headerPositionSearch++;
+            } else {
+                headerPositionSearch += 4;
+            }
+        }
+
+        if (found) {
+            // done reading
+            logger.info("Done reading the headers!!!");
+
+            parseIncomingRequest();
+
+            // rewind for next read
+            rewindIn();
+
+            setStatus(ConnectionStatus.WRITING);
+        } else {
+            // read more
+            setStatus(ConnectionStatus.READING);
+        }
     }
 
     public void write() throws IOException {
         logger.info("Writing");
         // chunked 0
-        out = new ByteArrayOutputStream();
 
-        out.write("HTTP/1.1 200 OK\r\n".getBytes());
-        out.write("Transfer-Encoding: chunked\r\n".getBytes());
-        out.write("\r\n".getBytes());
+        out.put("HTTP/1.1 200 OK\r\n".getBytes());
+        out.put("Content-type: text/plain\r\n".getBytes());
+        out.put("Transfer-Encoding: chunked\r\n".getBytes());
+        out.put("\r\n".getBytes());
 
-        byte [] chunk = "This is a test".getBytes();
+        byte [] chunk = "This is a test\n\n".getBytes();
 
-        out.write((Integer.toHexString(chunk.length)+"\r\n").getBytes());
-        out.write(chunk);
-        out.write("\r\n".getBytes());
+        out.put((Integer.toHexString(chunk.length) + "\r\n").getBytes());
+        out.put(chunk);
+        out.put("\r\n".getBytes());
 
-        out.write("0\r\n\r\n".getBytes());
+        out.put("0\r\n\r\n".getBytes());
 
-        logger.info(out.toString());
+        logger.info(new String(out.array(), 0, out.position(), "UTF-8"));
 
-        channel.write(ByteBuffer.wrap(out.toByteArray()));
+        channel.write(out);
 
+        out.rewind();
+
+        setStatus(ConnectionStatus.READING);
+    }
+
+    private void close() {
         try {
-            SelectionKey key = channel.register(selector, SelectionKey.OP_READ, this);
-            key.selector().wakeup();
-        } catch (ClosedChannelException e) {
+            SocketChannel channel = (SocketChannel)currentKey.channel();
+            channel.close();
+        } catch (IOException e) {
             logger.warn(e.getMessage(), e);
         }
+
+        setStatus(ConnectionStatus.CLOSED);
+    }
+
+    private void rewindIn() {
+        in.rewind();
+        headerPositionSearch = 0;
     }
 
 }

@@ -49,11 +49,11 @@ public class AsyncWebServer {
         System.out.println("Server listening on port "+port);
 
         for (int i=0; i < numberOfAcceptors; i++) {
-            acceptorThreads.add(new AcceptorThread(server, queue));
+            acceptorThreads.add(new AcceptorThread(i+1, server, queue));
         }
 
         for (int i=0; i < numberOfHandlers; i++) {
-            handlerThreads.add(new ConnectionHandlerThread(this, queue));
+            handlerThreads.add(new ConnectionHandlerThread(i+1, this, queue));
         }
 
         for (AcceptorThread acceptor : acceptorThreads) {

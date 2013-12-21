@@ -21,8 +21,8 @@ public class ConnectionHandlerThread extends Thread {
     private volatile boolean handling = false;
     private long lastActivity;
 
-    public ConnectionHandlerThread(AsyncWebServer server, BlockingQueue<ConnectionHandler> queue) {
-        super("Connection handler thread");
+    public ConnectionHandlerThread(int nr, AsyncWebServer server, BlockingQueue<ConnectionHandler> queue) {
+        super("Connection handler-"+nr);
 
         this.server = server;
         this.queue = queue;
@@ -56,7 +56,7 @@ public class ConnectionHandlerThread extends Thread {
                     try {
                         currentJob = queue.poll(1000, TimeUnit.MILLISECONDS);
 
-                        if (currentJob != null) {
+                        if (currentJob != null && !currentJob.isClosed()) {
                             try {
                                 handling = true;
                                 lastActivity = System.currentTimeMillis();

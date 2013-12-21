@@ -23,8 +23,6 @@ public class SimpleHttpRequest extends AttributeParameterHolder implements HttpS
     public SimpleHttpRequest() {
     }
 
-
-
     @Override
     public String getAuthType() {
         return null;  //To change body of implemented methods use File | Settings | File Templates.

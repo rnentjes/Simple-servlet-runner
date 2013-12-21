@@ -5,9 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.channels.*;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 
@@ -22,25 +20,23 @@ public class AcceptorThread extends Thread {
     boolean running;
 
     private ServerSocketChannel server;
-    private Selector selector;
 
     private BlockingQueue<ConnectionHandler> queue;
 
-    private Map<SocketChannel, ConnectionHandler> handlers = new HashMap<SocketChannel, ConnectionHandler>();
-
-    public AcceptorThread(ServerSocketChannel server, BlockingQueue<ConnectionHandler> queue) {
-        super("Acceptor thread");
+    public AcceptorThread(int nr, ServerSocketChannel server, BlockingQueue<ConnectionHandler> queue) {
+        super("Acceptor thread-"+nr);
 
         this.server = server;
         this.queue = queue;
     }
 
     public void run() {
+        Selector selector;
         running = true;
 
         try {
             selector = Selector.open();
-            SelectionKey selectionKey = server.register(selector, SelectionKey.OP_ACCEPT);
+            server.register(selector, SelectionKey.OP_ACCEPT);
         } catch (ClosedChannelException e) {
             throw new IllegalStateException(e);
         } catch (IOException e) {
@@ -63,35 +59,28 @@ public class AcceptorThread extends Thread {
                         SocketChannel channel = server.accept();
 
                         if (channel != null) {
-                            logger.info("Accepting connection from {}", channel.socket().toString());
-
-                            ConnectionHandler handler = new ConnectionHandler(channel, selector);
-
-                            handler.accept();
-
+                            logger.info("["+Thread.currentThread().getName()+"] Accepting connection from {}", channel.socket().toString());
                             channel.configureBlocking(false);
-                            key = channel.register(selector, SelectionKey.OP_READ, handler);
-                            key.selector().wakeup();
+
+                            ConnectionHandler handler = new ConnectionHandler(channel, key);
+
+                            handler.setCurrentKey(key);
+
+                            offer(handler);
                         }
-                    } else if (key.isReadable()) {
+                    } else {
                         ConnectionHandler handler = (ConnectionHandler)key.attachment();
 
-                        if (handler != null) {
-                            handler.read(key);
+                        if (handler.isReading() && key.isReadable()) {
+                            handler.setCurrentKey(key);
 
-                            if (handler.isReadyToProcess()) {
-                                queue.add(handler);
-                            }
-                        } else {
-                            throw new IllegalStateException("No handler found for channel: "+key.channel());
-                        }
-                     } else if (key.isWritable()) {
-                        ConnectionHandler handler = (ConnectionHandler)key.attachment();
+                            offer(handler);
+                        } else if (handler.isWriting() && key.isWritable()) {
+                            handler.setCurrentKey(key);
 
-                        if (handler != null) {
-                            handler.write();
+                            offer(handler);
                         } else {
-                            throw new IllegalStateException("No handler found for channel: "+key.channel());
+                            logger.warn("Ignoring key: "+key);
                         }
                     }
                 }
@@ -100,6 +89,17 @@ public class AcceptorThread extends Thread {
             } catch (IOException e) {
                 logger.error(e.getMessage(), e);
             }
+        }
+    }
+
+    private void offer(ConnectionHandler handler) {
+        try {
+            handler.process();
+            //queue.offer(handler, 10, TimeUnit.SECONDS);
+//        } catch (InterruptedException e) {
+//            logger.warn("Timeout while processing "+handler);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }

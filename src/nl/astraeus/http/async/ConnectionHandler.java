@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
@@ -25,15 +27,15 @@ public class ConnectionHandler {
         CLOSED
     }
 
-    private ByteBuffer in = ByteBuffer.allocate(4096);
-    private ByteBuffer out = ByteBuffer.allocate(4096);
+    private ByteBuffer in = ByteBuffer.allocate(2<<16);
+    private OutputStream out;
     private ConnectionStatus status = ConnectionStatus.NEW;
 
     private SocketChannel channel;
     private SelectionKey currentKey;
-    private int headerPositionSearch = 0;
+    private int headerPositionSearch;
 
-    private final long id;
+    private long id;
 
     private static long nextId = 0L;
     private static synchronized long nextId() {
@@ -41,10 +43,21 @@ public class ConnectionHandler {
     }
 
     public ConnectionHandler(SocketChannel channel, SelectionKey key) {
+        reset(channel, key);
+    }
+
+    public void reuse(SocketChannel channel, SelectionKey key) {
+        reset(channel, key);
+    }
+
+    private void reset(SocketChannel channel, SelectionKey key) {
         this.id = nextId();
         this.currentKey = key;
         this.channel = channel;
+        this.out = new AsyncOutputStream(channel);
         this.status = ConnectionStatus.ACCEPTING;
+        this.in.rewind();
+        this.headerPositionSearch = 0;
     }
 
     public void setCurrentKey(SelectionKey currentKey) {
@@ -105,30 +118,42 @@ public class ConnectionHandler {
         } catch (ClosedChannelException e) {
             logger.warn(e.getMessage(), e);
         }
-
     }
 
     public void process() throws IOException {
         logger.info("[Handler-"+id+"] ["+Thread.currentThread().getName()+"] Processing! ["+status+"]");
 
-        switch(status) {
-            case ACCEPTING:
-                accept();
-                break;
-            case READING:
-                read();
-                break;
-            case WRITING:
-                write();
-                break;
-            case CLOSED:
-                logger.warn("Trying to process closed connection!");
-                break;
+        try {
+            switch(status) {
+                case ACCEPTING:
+                    accept();
+                    break;
+                case READING:
+                    read();
+                    break;
+                case WRITING:
+                    write();
+                    break;
+                case CLOSED:
+                    logger.warn("Trying to process closed connection!");
+                    break;
+            }
+        } catch (IOException e) {
+            channel.close();
+
+            throw e;
         }
     }
 
     private void parseIncomingRequest() {
-        logger.info("Parsing");
+        logger.info("Parsing "+this.headerPositionSearch+" bytes from header.");
+
+        try {
+            logger.info("Headers ["+(new String(in.array(), 0, in.position(), "UTF-8"))+"]");
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+
     }
 
     public void read() throws IOException {
@@ -138,13 +163,13 @@ public class ConnectionHandler {
         int nr = channel.read(in);
 
         if (nr < 0) {
-            logger.warn("Partial read! [" + new String(out.array(), 0, out.position(), "UTF-8") + "]");
+            logger.debug("Partial read! [" + new String(in.array(), 0, in.position(), "UTF-8") + "]");
 
             close();
 
             return;
         } else if (nr == 0) {
-            logger.info("Empty read");
+            logger.debug("Empty read");
 
             return;
         }
@@ -187,24 +212,23 @@ public class ConnectionHandler {
         logger.info("Writing");
         // chunked 0
 
-        out.put("HTTP/1.1 200 OK\r\n".getBytes());
-        out.put("Content-type: text/plain\r\n".getBytes());
-        out.put("Transfer-Encoding: chunked\r\n".getBytes());
-        out.put("\r\n".getBytes());
+        out.write("HTTP/1.1 200 OK\r\n".getBytes());
+        out.write("Content-type: text/plain\r\n".getBytes());
+        out.write("Transfer-Encoding: chunked\r\n".getBytes());
+        out.write("\r\n".getBytes());
 
-        byte [] chunk = "This is a test\n\n".getBytes();
+        byte [] chunk = "This is a test ".getBytes();
+        byte [] length = (Integer.toHexString(chunk.length) + "\r\n").getBytes();
+        byte [] nl = "\r\n".getBytes();
 
-        out.put((Integer.toHexString(chunk.length) + "\r\n").getBytes());
-        out.put(chunk);
-        out.put("\r\n".getBytes());
+        for (int i = 0; i < 1000; i++) {
+            out.write(length);
+            out.write(chunk);
+            out.write(nl);
+        }
 
-        out.put("0\r\n\r\n".getBytes());
-
-        logger.info(new String(out.array(), 0, out.position(), "UTF-8"));
-
-        channel.write(out);
-
-        out.rewind();
+        out.write((Integer.toHexString(0) + "\r\n\r\n").getBytes());
+        out.flush();
 
         setStatus(ConnectionStatus.READING);
     }

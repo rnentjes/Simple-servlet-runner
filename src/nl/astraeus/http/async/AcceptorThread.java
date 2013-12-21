@@ -69,18 +69,20 @@ public class AcceptorThread extends Thread {
                             offer(handler);
                         }
                     } else {
-                        ConnectionHandler handler = (ConnectionHandler)key.attachment();
+                        final ConnectionHandler handler = (ConnectionHandler)key.attachment();
 
-                        if (handler.isReading() && key.isReadable()) {
-                            handler.setCurrentKey(key);
+                        synchronized (handler) {
+                            if (handler.isReading() && key.isReadable()) {
+                                handler.setCurrentKey(key);
 
-                            offer(handler);
-                        } else if (handler.isWriting() && key.isWritable()) {
-                            handler.setCurrentKey(key);
+                                offer(handler);
+                            } else if (handler.isWriting() && key.isWritable()) {
+                                handler.setCurrentKey(key);
 
-                            offer(handler);
-                        } else {
-                            logger.warn("Ignoring key: "+key);
+                                offer(handler);
+                            } else {
+                                logger.warn("Ignoring key: "+key);
+                            }
                         }
                     }
                 }

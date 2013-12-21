@@ -52,9 +52,10 @@ public class AsyncWebServer {
             acceptorThreads.add(new AcceptorThread(i+1, server, queue));
         }
 
+        /*
         for (int i=0; i < numberOfHandlers; i++) {
             handlerThreads.add(new ConnectionHandlerThread(i+1, this, queue));
-        }
+        }*/
 
         for (AcceptorThread acceptor : acceptorThreads) {
             acceptor.start();
